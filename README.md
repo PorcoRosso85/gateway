@@ -54,7 +54,7 @@ nix run .#gateway -- --session <session-name>
 
 - `flake.nix`: Nix flake定義（gateway app + テスト）
 - `backends/zmx-local/`: WSL内zmx backend（list/attachを提供）
-- `backends/zmx-remote/`: SSH経由zmx backend（TODO: Phase4）
+- `backends/zmx-remote/`: SSH経由zmx backend（list/attachを提供）
 - `flake.lock`: 依存ロックファイル
 
 ### 関連 flake

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # TODO: zmx-remote - SSH経由でリモートのzmxを呼ぶ
 #
 # 仕様:

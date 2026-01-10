@@ -8,13 +8,23 @@
     repo-sessions.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, zmx, repo-sessions }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      zmx,
+      repo-sessions,
+    }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" ];
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
       lib = nixpkgs.lib;
     in
     {
-      packages = lib.genAttrs systems (system:
+      packages = lib.genAttrs systems (
+        system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
           zmxPkg = zmx.packages.${system}.zmx or zmx.packages.${system}.default;
@@ -32,14 +42,15 @@
               export ZIG_LOCAL_CACHE_DIR="$TMPDIR/zig-cache"
             '';
           });
-           gateway = pkgs.writeShellApplication {
-             name = "gateway";
-             runtimeInputs = [ pkgs.fzf ];
-             text = ''
+          gateway = pkgs.writeShellApplication {
+            name = "gateway";
+            runtimeInputs = [ pkgs.fzf ];
+            text = ''
               #!/usr/bin/env bash
               set -euo pipefail
 
               GW_BACKEND="${zmx-local}/bin/zmx-local"
+              GW_PREFIX=""
 
               _gateway_backend_attach() {
                 local session="$1"
@@ -48,7 +59,7 @@
               }
 
               _gateway_backend_list() {
-                exec "$GW_BACKEND" list
+                "$GW_BACKEND" list
               }
 
               if [[ $# -gt 0 && "$1" == "--help" ]]; then
@@ -56,14 +67,27 @@
                 echo "Options:"
                 echo "  --help     Show this help message"
                 echo "  --session  Attach to a specific session (requires session name)"
+                echo "  --prefix   Filter sessions by prefix before fzf"
                 exit 0
               fi
 
-              if [[ $# -gt 0 && "$1" == "--session" ]]; then
-                _gateway_backend_attach "$2"
-              fi
+              while [[ $# -gt 0 ]]; do
+                case "$1" in
+                  --prefix)
+                    GW_PREFIX="$2"
+                    shift 2
+                    ;;
+                  --session)
+                    _gateway_backend_attach "$2"
+                    ;;
+                  *)
+                    echo "Unknown option: $1" >&2
+                    exit 1
+                    ;;
+                esac
+              done
 
-              sess=$(_gateway_backend_list | fzf --header="Select session" --height=50% --layout=reverse) || exit 0
+              sess=$(_gateway_backend_list | grep -E "^''${GW_PREFIX}" | fzf --header="Select session" --height=50% --layout=reverse) || exit 0
               [[ -n "$sess" ]] || exit 0
               _gateway_backend_attach "$sess"
             '';
@@ -76,11 +100,12 @@
           type = "app";
           program = "${self.packages.${system}.gateway}/bin/gateway";
         };
-        repo-sessions = repo-sessions.apps.${system};
+        repo-sessions = repo-sessions.apps.${system}.repo-sessions;
         default = self.apps.${system}.gateway;
       });
 
-      checks = lib.genAttrs systems (system:
+      checks = lib.genAttrs systems (
+        system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
           gatewayApp = self.packages.${system}.gateway;
@@ -116,23 +141,24 @@
             dontConfigure = true;
             dontUnpack = true;
             installPhase = ''
-              mkdir -p $out/bin
-              cat > $out/bin/zmx << 'MOCK_ZMX'
-#!/usr/bin/env bash
-exit 0
-MOCK_ZMX
-              chmod +x $out/bin/zmx
+                            mkdir -p $out/bin
+                            cat > $out/bin/zmx << 'MOCK_ZMX'
+              #!/bin/sh
+              echo "zmx $*" >&2
+              exit 0
+              MOCK_ZMX
+                            chmod +x $out/bin/zmx
 
-              SCRIPT=${gatewayApp}/bin/gateway
-              PATH="$out/bin:$PATH" STERR=$($SCRIPT --session test-session 2>&1 || true)
-              if echo "$STERR" | grep -q "GW_BACKEND_CALL=attach session=test-session"; then
-                echo "PASS: bb-red-session-attach"
-                touch $out/passed
-              else
-                echo "FAIL: bb-red-session-attach - GW_BACKEND_CALL not found in stderr"
-                echo "stderr was: $STERR"
-                exit 1
-              fi
+                                          SCRIPT=${gatewayApp}/bin/gateway
+                                          PATH="$out/bin:$PATH" STERR=$($SCRIPT --session test-session 2>&1 || true)
+                                          if echo "$STERR" | grep -q "GW_BACKEND_CALL=attach session=test-session"; then
+                                            echo "PASS: bb-red-session-attach"
+                                            touch $out/passed
+                                          else
+                                            echo "FAIL: bb-red-session-attach - GW_BACKEND_CALL not found in stderr"
+                                            echo "stderr was: $STERR"
+                                            exit 1
+                                          fi
             '';
           };
 
@@ -165,24 +191,24 @@ MOCK_ZMX
             dontConfigure = true;
             dontUnpack = true;
             installPhase = ''
-              mkdir -p $out/bin
-              cat > $out/bin/zmx << 'MOCK_ZMX'
-#!/usr/bin/env bash
-echo "session-1"
-echo "session-2"
-MOCK_ZMX
-              chmod +x $out/bin/zmx
+                            mkdir -p $out/bin
+                            cat > $out/bin/zmx << 'MOCK_ZMX'
+              #!/bin/sh
+              echo "session-1"
+              echo "session-2"
+              MOCK_ZMX
+                            chmod +x $out/bin/zmx
 
-              BACKEND=${zmxLocal}/bin/zmx-local
-              PATH="$out/bin:$PATH" OUTPUT=$($BACKEND list 2>&1 || true)
-              if echo "$OUTPUT" | grep -q "session-1" && echo "$OUTPUT" | grep -q "session-2"; then
-                echo "PASS: zmx-local-list"
-                touch $out
-              else
-                echo "FAIL: zmx-local-list - expected session list"
-                echo "Output was: $OUTPUT"
-                exit 1
-              fi
+                            BACKEND=${zmxLocal}/bin/zmx-local
+                            PATH="$out/bin:$PATH" OUTPUT=$($BACKEND list 2>&1 || true)
+                            if echo "$OUTPUT" | grep -q "session-1" && echo "$OUTPUT" | grep -q "session-2"; then
+                              echo "PASS: zmx-local-list"
+                              touch $out
+                            else
+                              echo "FAIL: zmx-local-list - expected session list"
+                              echo "Output was: $OUTPUT"
+                              exit 1
+                            fi
             '';
           };
 
@@ -193,23 +219,24 @@ MOCK_ZMX
             dontConfigure = true;
             dontUnpack = true;
             installPhase = ''
-              mkdir -p $out/bin
-              cat > $out/bin/zmx << 'MOCK_ZMX'
-#!/usr/bin/env bash
-exit 0
-MOCK_ZMX
-              chmod +x $out/bin/zmx
+                            mkdir -p $out/bin
+                            cat > $out/bin/zmx << 'MOCK_ZMX'
+              #!/bin/sh
+              echo "zmx $*" >&2
+              exit 0
+              MOCK_ZMX
+                            chmod +x $out/bin/zmx
 
-              BACKEND=${zmxLocal}/bin/zmx-local
-              PATH="$out/bin:$PATH" OUTPUT=$($BACKEND attach test-session 2>&1 || true)
-              if echo "$OUTPUT" | grep -q "zmx attach test-session"; then
-                echo "PASS: zmx-local-attach"
-                touch $out
-              else
-                echo "FAIL: zmx-local-attach - zmx attach not called"
-                echo "Output was: $OUTPUT"
-                exit 1
-              fi
+                                          BACKEND=${zmxLocal}/bin/zmx-local
+                                          PATH="$out/bin:$PATH" OUTPUT=$($BACKEND attach test-session 2>&1 || true)
+                                          if echo "$OUTPUT" | grep -q "zmx attach test-session"; then
+                                            echo "PASS: zmx-local-attach"
+                                            touch $out
+                                          else
+                                            echo "FAIL: zmx-local-attach - zmx attach not called"
+                                            echo "Output was: $OUTPUT"
+                                            exit 1
+                                          fi
             '';
           };
 
@@ -220,25 +247,27 @@ MOCK_ZMX
             dontConfigure = true;
             dontUnpack = true;
             installPhase = ''
-              mkdir -p $out/bin
-              cat > $out/bin/ssh << 'MOCK_SSH'
-#!/usr/bin/env bash
-echo "SSH_ARGV: $*" >&2
-MOCK_SSH
-              chmod +x $out/bin/ssh
+                            mkdir -p $out/bin
+                            cat > $out/bin/ssh << 'MOCK_SSH'
+              #!/bin/sh
+              echo "SSH_ARGV: ssh $*" >&2
+              MOCK_SSH
+                            chmod +x $out/bin/ssh
 
-              BACKEND=${zmxRemote}/bin/zmx-remote
-              PATH="$out/bin:$PATH" REMOTE_HOST=test-host STDOUT=$($BACKEND list 2>&1 || true)
-              SSH_ARGS=$(echo "$STDOUT" | grep "SSH_ARGV:" | sed 's/SSH_ARGV: //' || true)
-              if echo "$SSH_ARGS" | grep -q "ssh.*-T.*test-host.*--.*zmx.*list"; then
-                echo "PASS: zmx-remote-list"
-                touch $out
-              else
-                echo "FAIL: zmx-remote-list - expected 'ssh -T <host> -- zmx list'"
-                echo "SSH args were: $SSH_ARGS"
-                echo "Full output was: $STDOUT"
-                exit 1
-              fi
+                                          BACKEND=${zmxRemote}/bin/zmx-remote
+                                          export REMOTE_HOST=test-host
+                                          export PATH="$out/bin:$PATH"
+                                          STDOUT=$($BACKEND list 2>&1 || true)
+                                          SSH_ARGS=$(echo "$STDOUT" | grep "SSH_ARGV:" | sed 's/SSH_ARGV: //' || true)
+                                          if echo "$SSH_ARGS" | grep -q "ssh.*-T.*test-host.*--.*zmx.*list"; then
+                                            echo "PASS: zmx-remote-list"
+                                            touch $out
+                                          else
+                                            echo "FAIL: zmx-remote-list - expected 'ssh -T <host> -- zmx list'"
+                                            echo "SSH args were: $SSH_ARGS"
+                                            echo "Full output was: $STDOUT"
+                                            exit 1
+                                          fi
             '';
           };
 
@@ -249,25 +278,27 @@ MOCK_SSH
             dontConfigure = true;
             dontUnpack = true;
             installPhase = ''
-              mkdir -p $out/bin
-              cat > $out/bin/ssh << 'MOCK_SSH'
-#!/usr/bin/env bash
-echo "SSH_ARGV: $*" >&2
-MOCK_SSH
-              chmod +x $out/bin/ssh
+                            mkdir -p $out/bin
+                            cat > $out/bin/ssh << 'MOCK_SSH'
+              #!/bin/sh
+              echo "SSH_ARGV: ssh $*" >&2
+              MOCK_SSH
+                            chmod +x $out/bin/ssh
 
-              BACKEND=${zmxRemote}/bin/zmx-remote
-              PATH="$out/bin:$PATH" REMOTE_HOST=test-host STDOUT=$($BACKEND attach test-session 2>&1 || true)
-              SSH_ARGS=$(echo "$STDOUT" | grep "SSH_ARGV:" | sed 's/SSH_ARGV: //' || true)
-              if echo "$SSH_ARGS" | grep -q "ssh.*-T.*test-host.*--.*zmx.*attach.*test-session"; then
-                echo "PASS: zmx-remote-attach"
-                touch $out
-              else
-                echo "FAIL: zmx-remote-attach - expected 'ssh -T <host> -- zmx attach <session>'"
-                echo "SSH args were: $SSH_ARGS"
-                echo "Full output was: $STDOUT"
-                exit 1
-              fi
+                                          BACKEND=${zmxRemote}/bin/zmx-remote
+                                          export REMOTE_HOST=test-host
+                                          export PATH="$out/bin:$PATH"
+                                          STDOUT=$($BACKEND attach test-session 2>&1 || true)
+                                          SSH_ARGS=$(echo "$STDOUT" | grep "SSH_ARGV:" | sed 's/SSH_ARGV: //' || true)
+                                          if echo "$SSH_ARGS" | grep -q "ssh.*-T.*test-host.*--.*zmx.*attach.*test-session"; then
+                                            echo "PASS: zmx-remote-attach"
+                                            touch $out
+                                          else
+                                            echo "FAIL: zmx-remote-attach - expected 'ssh -T <host> -- zmx attach <session>'"
+                                            echo "SSH args were: $SSH_ARGS"
+                                            echo "Full output was: $STDOUT"
+                                            exit 1
+                                          fi
             '';
           };
 
@@ -293,6 +324,41 @@ MOCK_SSH
 
               echo "PASS: zmxHead-explicit-only - gateway does not directly reference zmx/zmxHead"
               touch $out
+            '';
+          };
+
+          list-filter-by-prefix = pkgs.stdenv.mkDerivation {
+            name = "test-list-filter-by-prefix";
+            src = self;
+            dontBuild = true;
+            dontConfigure = true;
+            dontUnpack = true;
+            installPhase = ''
+              mkdir -p $out/bin
+              cat > $out/bin/zmx << 'MOCK_ZMX'
+              #!/bin/sh
+              echo "prefix-session1"
+              echo "prefix-session2"
+              echo "other-session"
+              MOCK_ZMX
+              chmod +x $out/bin/zmx
+
+              BACKEND=${zmxLocal}/bin/zmx-local
+              export PATH="$out/bin:$PATH"
+
+              GATEWAY=${gatewayApp}/bin/gateway
+              OUTPUT=$($BACKEND list | grep -E "^prefix" || true)
+
+              if echo "$OUTPUT" | grep -q "prefix-session1" && \
+                 echo "$OUTPUT" | grep -q "prefix-session2" && \
+                 ! echo "$OUTPUT" | grep -q "other-session"; then
+                echo "PASS: list-filter-by-prefix - prefix filter works"
+                touch $out
+              else
+                echo "FAIL: list-filter-by-prefix - grep filter not working correctly"
+                echo "filter output was: $OUTPUT"
+                exit 1
+              fi
             '';
           };
         }

@@ -1,6 +1,6 @@
 { pkgs, zmxPkg }:
 pkgs.writeShellApplication {
   name = "zmx-remote";
-  runtimeInputs = [ zmxPkg pkgs.openssh ];
+  runtimeInputs = [ ];
   text = builtins.readFile ./bin/zmx-remote;
 }
