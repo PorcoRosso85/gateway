@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cmd="${1:-}"
+
+case "$cmd" in
+  list)
+    exec zmx list
+    ;;
+  attach)
+    session="${2:-}"
+    if [[ -z "$session" ]]; then
+      echo "Error: session name required for attach" >&2
+      exit 1
+    fi
+    exec zmx attach "$session"
+    ;;
+  "" | *)
+    echo "Usage: zmx-local <command>" >&2
+    echo "Commands: list, attach <session>" >&2
+    exit 1
+    ;;
+esac

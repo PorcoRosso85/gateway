@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# TODO: zmx-remote - SSH経由でリモートのzmxを呼ぶ
+#
+# 仕様:
+#   - REMOTE_HOST 環境変数必須
+#   - ssh -T "$REMOTE_HOST" -- zmx <command> [<args>...]
+#   - GW_BACKEND_CALL 観測は gateway 側で行う（DRY）
+#
+# 環境変数:
+#   - REMOTE_HOST: SSH接続先（必須）
+#
+# 使用例:
+#   REMOTE_HOST=dev nix run .#gateway -- --mode remote --session myrepo
+#
+# 実装要件:
+#   - ${1:-} で引数を安全に受け取る
+#   - ssh -T はtty不要、CIでも安定
+#   - zmx attach の command 対応は gateway 層で処理
+#
+# テスト:
+#   - mock-ssh で ssh 呼び出しを観測
+#   - 実SSH到達不要（stubでOK）
+#
+# 完了条件:
+#   - nix build .#checks.x86_64-linux.zmx-remote-list PASS
+#   - nix build .#checks.x86_64-linux.zmx-remote-attach PASS
+#
+set -euo pipefail
+
+REMOTE_HOST="${REMOTE_HOST:-}"
+if [[ -z "$REMOTE_HOST" ]]; then
+  echo "Error: REMOTE_HOST environment variable is required" >&2
+  exit 1
+fi
+
+cmd="${1:-}"
+
+case "$cmd" in
+  list)
+    exec ssh -T "$REMOTE_HOST" -- zmx list
+    ;;
+  attach)
+    session="${2:-}"
+    if [[ -z "$session" ]]; then
+      echo "Error: session name required for attach" >&2
+      exit 1
+    fi
+    shift 2
+    exec ssh -T "$REMOTE_HOST" -- zmx attach "$session" "$@"
+    ;;
+  "" | *)
+    echo "Usage: zmx-remote <command> [<args>...]" >&2
+    echo "Commands: list, attach <session> [<command>...]" >&2
+    echo "Environment:" >&2
+    echo "  REMOTE_HOST  SSH connection target (required)" >&2
+    exit 1
+    ;;
+esac
