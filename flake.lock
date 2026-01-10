@@ -56,8 +56,8 @@
         ]
       },
       "locked": {
-        "lastModified": 1767775301,
-        "narHash": "sha256-w9B56o709qz8pqQVewFuy1JrfpcJliUOfzlPXCc0m2w=",
+        "lastModified": 1768013256,
+        "narHash": "sha256-gTBXMU5sAoiIBiP7W/oF5KZETodlHcHHjZOxiysIID4=",
         "path": "/home/nixos/repos/repo-sessions",
         "type": "path"
       },
