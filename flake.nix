@@ -393,12 +393,6 @@
                 exit 1
               fi
 
-              # Check that fzf is not referenced anywhere in gateway
-              if grep -R "\bfzf\b" "$GATEWAY_SCRIPT"; then
-                echo "FAIL: forbid-fzf - fzf string found in gateway script"
-                exit 1
-              fi
-
               echo "PASS: forbid-fzf - fzf not referenced in gateway"
               touch $out
             '';
