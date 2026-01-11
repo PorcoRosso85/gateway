@@ -7,20 +7,20 @@ WSL/NixOSからzmxセッションを選択・attachするgateway flake
 `GW_BACKEND_CALL` 環境でbackend呼び出しを観測可能：
 
 ```bash
-./result/bin/gateway --session <name> 2>&1 | grep GW_BACKEND_CALL
+nix run .#gateway -- --session <name> 2>&1 | grep GW_BACKEND_CALL
 ```
 
 ## 使用方法
 
 ```bash
-# ローカル開発（path-basedでも安全：zmxHeadをビルドしない）
-nix run ~/repos/gateway-remote#gateway
+# session一覧確認
+nix run .#gateway -- --list
 
-# flake refベースも同様
-nix run .#gateway
+# 特定sessionにattach
+nix run .#gateway -- --session <name>
 
 # GitHubから（push後）
-nix run github:t-takazawa/gateway-remote#gateway
+nix run github:<owner>/<repo>#gateway -- --session <name>
 ```
 
 **安全性の根拠**: `gateway` は `zmx` を build dependency として持たず、PATH解決のみ。`nix run` で zmx HEAD をビルドすることは **ありません**。
@@ -31,7 +31,7 @@ nix run github:t-takazawa/gateway-remote#gateway
 
 ```bash
 # WSL内のNixOSで実行
-sudo nix build ~/repos/gateway-remote#zmxHead --option sandbox false -o ~/.cache/zmxHead
+sudo nix build .#zmxHead --option sandbox false -o ~/.cache/zmxHead
 
 # zmx を PATH に symlink
 mkdir -p ~/.local/bin
