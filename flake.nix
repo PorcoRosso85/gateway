@@ -363,7 +363,7 @@
               export PATH="$out/bin:$PATH"
 
               GATEWAY=${gatewayApp}/bin/gateway
-              OUTPUT=$($BACKEND list | grep -E "^prefix" || true)
+              OUTPUT=$($GATEWAY --list --prefix "prefix" 2>&1 || true)
 
               if echo "$OUTPUT" | grep -q "prefix-session1" && \
                  echo "$OUTPUT" | grep -q "prefix-session2" && \
@@ -375,6 +375,26 @@
                 echo "filter output was: $OUTPUT"
                 exit 1
               fi
+            '';
+          };
+
+          forbid-fzf = pkgs.stdenv.mkDerivation {
+            name = "test-forbid-fzf";
+            src = self;
+            dontBuild = true;
+            dontConfigure = true;
+            dontUnpack = true;
+            installPhase = ''
+              GATEWAY_SCRIPT=${gatewayApp}/bin/gateway
+
+              # Check that fzf is not referenced anywhere in gateway
+              if grep -R "\bfzf\b" $GATEWAY_SCRIPT; then
+                echo "FAIL: forbid-fzf - fzf string found in gateway script"
+                exit 1
+              fi
+
+              echo "PASS: forbid-fzf - fzf not referenced in gateway"
+              touch $out
             '';
           };
         }

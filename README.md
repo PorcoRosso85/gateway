@@ -47,7 +47,10 @@ zmx --version
 ## オプション
 
 ```bash
-nix run .#gateway -- --session <session-name>
+--help     Show this help message
+--list     List sessions (with optional --prefix filter)
+--session  Attach to a specific session (required)
+--prefix   Filter sessions by prefix (for --list)
 ```
 
 ## 構成
@@ -56,47 +59,3 @@ nix run .#gateway -- --session <session-name>
 - `backends/zmx-local/`: WSL内zmx backend（list/attachを提供）
 - `backends/zmx-remote/`: SSH経由zmx backend（list/attachを提供）
 - `flake.lock`: 依存ロックファイル
-
-### 関連 flake
-
-- `repo-sessions`: `$HOME/repos` からrepo選択 → zmx attach → tool起動
-  - **⚠️  注意**: `nix run ~/repos/gateway-remote#repo-sessions` は **ショートカット** です
-  - 正本は `~/repos/repo-sessions` です（テスト/設定はそっちで完結）
-  - 詳細は `~/repos/repo-sessions/README.md`
-
-### ディレクトリ構成について
-
-Phase3で `backends/zmx-local/` を分離しました。`backends/shared/` は **重複が実在したら作成** します（YAGNI防止）。
-
-### リモートホストでの zmx HEAD インストール
-
-`zmx-remote` backend を使う場合、リモートホストでも zmx HEAD が必要：
-
-```bash
-# リモートホスト（NixOS）で実行
-ssh <host> "mkdir -p ~/.cache && nix build <path-to-gateway-remote>#zmxHead --option sandbox false -o ~/.cache/zmxHead"
-ssh <host> "mkdir -p ~/.local/bin && ln -sf ~/.cache/zmxHead/bin/zmx ~/.local/bin/zmx"
-ssh <host> "zmx --version"  # zmx 0.2.0 と表示されればOK
-```
-
-### 断言コマンド
-
-```bash
-# apps-wireup: --help が Usage を表示するか検証
-nix build .#checks.x86_64-linux.apps-wireup
-
-# bb-red-session-attach: --session 時に stderr に GW_BACKEND_CALL が出るか検証
-nix build .#checks.x86_64-linux.bb-red-session-attach
-
-# forbid-direct-zmx: gateway が zmx を直接呼ばず backend 経由か検証
-nix build .#checks.x86_64-linux.forbid-direct-zmx
-
-# zmx-local-list: zmx-local list が zmx list を呼ぶか検証
-nix build .#checks.x86_64-linux.zmx-local-list
-
-# zmx-local-attach: zmx-local attach <session> が zmx attach <session> を呼ぶか検証
-nix build .#checks.x86_64-linux.zmx-local-attach
-
-# zmxHead-explicit-only: gateway が zmxHead をビルド/依存しないことを検証
-nix build .#checks.x86_64-linux.zmxHead-explicit-only
-```
