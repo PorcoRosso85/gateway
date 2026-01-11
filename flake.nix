@@ -44,13 +44,15 @@
           });
           gateway = pkgs.writeShellApplication {
             name = "gateway";
-            runtimeInputs = [ pkgs.fzf ];
+            runtimeInputs = [ ];
             text = ''
               #!/usr/bin/env bash
               set -euo pipefail
 
               GW_BACKEND="${zmx-local}/bin/zmx-local"
               GW_PREFIX=""
+              GW_SESSION=""
+              GW_LIST=""
 
               _gateway_backend_attach() {
                 local session="$1"
@@ -66,19 +68,25 @@
                 echo "Usage: gateway [OPTIONS]"
                 echo "Options:"
                 echo "  --help     Show this help message"
-                echo "  --session  Attach to a specific session (requires session name)"
-                echo "  --prefix   Filter sessions by prefix before fzf"
+                echo "  --list     List sessions (with optional --prefix filter)"
+                echo "  --session  Attach to a specific session (required)"
+                echo "  --prefix   Filter sessions by prefix (for --list)"
                 exit 0
               fi
 
               while [[ $# -gt 0 ]]; do
                 case "$1" in
+                  --list)
+                    GW_LIST="1"
+                    shift
+                    ;;
                   --prefix)
                     GW_PREFIX="$2"
                     shift 2
                     ;;
                   --session)
-                    _gateway_backend_attach "$2"
+                    GW_SESSION="$2"
+                    shift 2
                     ;;
                   *)
                     echo "Unknown option: $1" >&2
@@ -87,9 +95,17 @@
                 esac
               done
 
-              sess=$(_gateway_backend_list | grep -E "^''${GW_PREFIX}" | fzf --header="Select session" --height=50% --layout=reverse) || exit 0
-              [[ -n "$sess" ]] || exit 0
-              _gateway_backend_attach "$sess"
+              if [[ -n "$GW_LIST" ]]; then
+                _gateway_backend_list | grep -E "^''${GW_PREFIX}"
+                exit 0
+              fi
+
+              if [[ -z "$GW_SESSION" ]]; then
+                echo "Error: --session is required (use --list to see available sessions)" >&2
+                exit 1
+              fi
+
+              _gateway_backend_attach "$GW_SESSION"
             '';
           };
         }
