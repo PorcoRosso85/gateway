@@ -387,8 +387,14 @@
             installPhase = ''
               GATEWAY_SCRIPT=${gatewayApp}/bin/gateway
 
+              # Check that zmx is not called directly
+              if grep -E '^\s*(exec\s+)?zmx\s' "$GATEWAY_SCRIPT"; then
+                echo "FAIL: forbid-direct-zmx - gateway calls zmx directly (use backend dispatch instead)"
+                exit 1
+              fi
+
               # Check that fzf is not referenced anywhere in gateway
-              if grep -R "\bfzf\b" $GATEWAY_SCRIPT; then
+              if grep -R "\bfzf\b" "$GATEWAY_SCRIPT"; then
                 echo "FAIL: forbid-fzf - fzf string found in gateway script"
                 exit 1
               fi
