@@ -44,7 +44,7 @@
           });
           gateway = pkgs.writeShellApplication {
             name = "gateway";
-            runtimeInputs = [ ];
+            runtimeInputs = [ pkgs.fzf ];
             text = ''
               #!/usr/bin/env bash
               set -euo pipefail
@@ -53,6 +53,30 @@
               GW_PREFIX=""
               GW_SESSION=""
               GW_LIST=""
+
+              print_usage() {
+                echo "Usage: gateway [OPTIONS]"
+                echo "Options:"
+                echo "  --help     Show this help"
+                echo "  --list     List sessions (with optional --prefix filter)"
+                echo "  --prefix   Filter sessions by prefix (for --list)"
+                echo "  --session  Attach to a specific session"
+              }
+
+              extract_session_names() {
+                local prefix="$1"
+                while IFS= read -r line; do
+                  local name
+                  if [[ "$line" == session_name=* ]]; then
+                    name="''${line#session_name=}"
+                  else
+                    name="$line"
+                  fi
+                  if [[ -z "$prefix" || "$name" == ''${prefix}* ]]; then
+                    echo "$name"
+                  fi
+                done
+              }
 
               _gateway_backend_attach() {
                 local session="$1"
@@ -64,45 +88,57 @@
                 "$GW_BACKEND" list
               }
 
-              if [[ $# -gt 0 && "$1" == "--help" ]]; then
-                echo "Usage: gateway [OPTIONS]"
-                echo "Options:"
-                echo "  --help     Show this help message"
-                echo "  --list     List sessions (with optional --prefix filter)"
-                echo "  --session  Attach to a specific session (required)"
-                echo "  --prefix   Filter sessions by prefix (for --list)"
-                exit 0
-              fi
-
               while [[ $# -gt 0 ]]; do
                 case "$1" in
-                  --list)
-                    GW_LIST="1"
-                    shift
-                    ;;
                   --prefix)
+                    if [[ -z "''${2:-}" || "$2" == --* ]]; then
+                      echo "Error: --prefix requires a value" >&2
+                      print_usage
+                      exit 1
+                    fi
                     GW_PREFIX="$2"
                     shift 2
                     ;;
                   --session)
+                    if [[ -z "''${2:-}" || "$2" == --* ]]; then
+                      echo "Error: --session requires a value" >&2
+                      print_usage
+                      exit 1
+                    fi
                     GW_SESSION="$2"
                     shift 2
                     ;;
+                  --list)
+                    GW_LIST="1"
+                    shift
+                    ;;
+                  --help)
+                    print_usage
+                    exit 0
+                    ;;
                   *)
                     echo "Unknown option: $1" >&2
+                    print_usage
                     exit 1
                     ;;
                 esac
               done
 
               if [[ -n "$GW_LIST" ]]; then
-                _gateway_backend_list | grep -E "^''${GW_PREFIX}"
+                _gateway_backend_list | extract_session_names "$GW_PREFIX"
                 exit 0
               fi
 
               if [[ -z "$GW_SESSION" ]]; then
-                echo "Error: --session is required (use --list to see available sessions)" >&2
-                exit 1
+                GW_SESSION=$(_gateway_backend_list \
+                  | extract_session_names "$GW_PREFIX" \
+                  | sort \
+                  | fzf --header="Select session to attach")
+
+                if [[ -z "$GW_SESSION" ]]; then
+                  echo "Error: no session selected" >&2
+                  exit 1
+                fi
               fi
 
               _gateway_backend_attach "$GW_SESSION"
@@ -350,51 +386,93 @@
             dontConfigure = true;
             dontUnpack = true;
             installPhase = ''
-              mkdir -p $out/bin
-              cat > $out/bin/zmx << 'MOCK_ZMX'
-              #!/bin/sh
-              echo "prefix-session1"
-              echo "prefix-session2"
-              echo "other-session"
-              MOCK_ZMX
-              chmod +x $out/bin/zmx
+                            mkdir -p $out/bin
+                            cat > $out/bin/zmx << 'MOCK_ZMX'
+                            #!/bin/sh
+                            exit 0
+                            MOCK_ZMX
+                            chmod +x $out/bin/zmx
 
-              BACKEND=${zmxLocal}/bin/zmx-local
-              export PATH="$out/bin:$PATH"
+                            cat > $out/bin/zmx-local << 'MOCK_LOCAL'
+                              #!/bin/sh
+                              cat << 'EOF'
+              prefix-session1
+              prefix-session2
+              other-session
+              EOF
+                            MOCK_LOCAL
+                            chmod +x $out/bin/zmx-local
 
-              GATEWAY=${gatewayApp}/bin/gateway
-              OUTPUT=$($GATEWAY --list --prefix "prefix" 2>&1 || true)
+                            GATEWAY=${gatewayApp}/bin/gateway
+                            PATH="$out/bin:$PATH" OUTPUT=$($GATEWAY --list --prefix "prefix" 2>&1 || true)
 
-              if echo "$OUTPUT" | grep -q "prefix-session1" && \
-                 echo "$OUTPUT" | grep -q "prefix-session2" && \
-                 ! echo "$OUTPUT" | grep -q "other-session"; then
-                echo "PASS: list-filter-by-prefix - prefix filter works"
-                touch $out
-              else
-                echo "FAIL: list-filter-by-prefix - grep filter not working correctly"
-                echo "filter output was: $OUTPUT"
-                exit 1
-              fi
+                            if echo "$OUTPUT" | grep -q "prefix-session1" && \
+                               echo "$OUTPUT" | grep -q "prefix-session2" && \
+                               ! echo "$OUTPUT" | grep -q "other-session"; then
+                              echo "PASS: list-filter-by-prefix - prefix filter works"
+                              touch $out
+                            else
+                              echo "FAIL: list-filter-by-prefix - grep filter not working correctly"
+                              echo "filter output was: $OUTPUT"
+                              exit 1
+                            fi
             '';
           };
 
-          forbid-fzf = pkgs.stdenv.mkDerivation {
-            name = "test-forbid-fzf";
+          uses-fzf = pkgs.stdenv.mkDerivation {
+            name = "test-uses-fzf";
             src = self;
             dontBuild = true;
             dontConfigure = true;
             dontUnpack = true;
             installPhase = ''
-              GATEWAY_SCRIPT=${gatewayApp}/bin/gateway
+                            mkdir -p $out/bin
 
-              # Check that zmx is not called directly
-              if grep -E '^\s*(exec\s+)?zmx\s' "$GATEWAY_SCRIPT"; then
-                echo "FAIL: forbid-direct-zmx - gateway calls zmx directly (use backend dispatch instead)"
-                exit 1
-              fi
+                            cat > $out/bin/fzf << 'MOCK_FZF'
+                              #!/bin/sh
+                              echo "FZF_CALLED" >&2
+                              echo "gateway-git"
+                              exit 0
+                            MOCK_FZF
+                            chmod +x $out/bin/fzf
 
-              echo "PASS: forbid-fzf - no external tool calls found"
-              touch $out
+                            cat > $out/bin/zmx << 'MOCK_ZMX'
+                              #!/bin/sh
+                              if [ "$1" = "attach" ]; then
+                                echo "GW_BACKEND_CALL=attach session=$2" >&2
+                              fi
+                              exit 0
+                            MOCK_ZMX
+                            chmod +x $out/bin/zmx
+
+                            cat > $out/bin/zmx-local << 'MOCK_LOCAL'
+                              #!/bin/sh
+                              case "$1" in
+                                list) cat << 'EOF'
+              prefix-session1
+              prefix-session2
+              other-session
+              EOF
+                                  ;;
+                                attach)
+                                  exec zmx attach "$2"
+                                  ;;
+                              esac
+                            MOCK_LOCAL
+                            chmod +x $out/bin/zmx-local
+
+                            GATEWAY=${gatewayApp}/bin/gateway
+                            PATH="$out/bin:$PATH" STDERR=$($GATEWAY 2>&1 || true)
+
+                            if echo "$STDERR" | grep -q "FZF_CALLED" && \
+                               echo "$STDERR" | grep -q "GW_BACKEND_CALL=attach session=gateway-git"; then
+                              echo "PASS: uses-fzf - fzf selected session passed to attach"
+                              touch $out/passed
+                            else
+                              echo "FAIL: uses-fzf"
+                              echo "stderr was: $STDERR"
+                              exit 1
+                            fi
             '';
           };
         }
