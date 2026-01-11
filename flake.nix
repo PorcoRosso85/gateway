@@ -393,7 +393,7 @@
                 exit 1
               fi
 
-              echo "PASS: forbid-fzf - fzf not referenced in gateway"
+              echo "PASS: forbid-fzf - no external tool calls found"
               touch $out
             '';
           };
