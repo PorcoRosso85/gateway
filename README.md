@@ -13,14 +13,20 @@ nix run .#gateway -- --session <name> 2>&1 | grep GW_BACKEND_CALL
 ## 使用方法
 
 ```bash
+# インタラクティブ選択（fzfでセッションを選んでattach）
+nix run .#gateway
+
 # session一覧確認
 nix run .#gateway -- --list
 
-# 特定sessionにattach
+# 特定sessionにattach（明示的指定）
 nix run .#gateway -- --session <name>
 
+# prefixでフィルタして選択
+nix run .#gateway -- --prefix dev -- --list
+
 # GitHubから（push後）
-nix run github:<owner>/<repo>#gateway -- --session <name>
+nix run github:<owner>/<repo>#gateway
 ```
 
 **安全性の根拠**: `gateway` は `zmx` を build dependency として持たず、PATH解決のみ。`nix run` で zmx HEAD をビルドすることは **ありません**。
@@ -42,15 +48,15 @@ zmx --version
 # zmx 0.2.0
 ```
 
-**注意**: `zmxHead` のbuildにはネットワークアクセスが必要（Nix sandboxを無効化）。一度buildすれば以降は `nix run .#gateway` だけでOK。
+**注意**: `zmxHead` のbuildにはネットワークアクセスが必要（Nix sandboxを無効化）。一度buildすれば以降は `nix run .#gateway` だけでOK（fzfでインタラクティブ選択）。
 
 ## オプション
 
 ```bash
 --help     Show this help message
 --list     List sessions (with optional --prefix filter)
---session  Attach to a specific session (required)
---prefix   Filter sessions by prefix (for --list)
+--prefix   Filter sessions by prefix (for --list or fzf)
+--session  Attach to a specific session (optional, fzf used if omitted)
 ```
 
 ## 構成
