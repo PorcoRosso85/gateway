@@ -69,6 +69,7 @@
                   local name
                   if [[ "$line" == session_name=* ]]; then
                     name="''${line#session_name=}"
+                    name="''${name%%[[:space:]]*}"
                   else
                     name="$line"
                   fi
@@ -426,32 +427,31 @@
             dontConfigure = true;
             dontUnpack = true;
             installPhase = ''
-                            mkdir -p $out/bin
+                                          mkdir -p $out/bin
 
-                            cat > $out/bin/fzf << 'MOCK_FZF'
-                              #!/bin/sh
-                              echo "FZF_CALLED" >&2
-                              echo "gateway-git"
-                              exit 0
-                            MOCK_FZF
-                            chmod +x $out/bin/fzf
+                                          cat > $out/bin/fzf << 'MOCK_FZF'
+                                            #!/bin/sh
+                                            echo "FZF_CALLED" >&2
+                                            echo "gateway-git"
+                                            exit 0
+                                          MOCK_FZF
+                                          chmod +x $out/bin/fzf
 
-                            cat > $out/bin/zmx << 'MOCK_ZMX'
-                              #!/bin/sh
-                              if [ "$1" = "attach" ]; then
-                                echo "GW_BACKEND_CALL=attach session=$2" >&2
-                              fi
-                              exit 0
-                            MOCK_ZMX
-                            chmod +x $out/bin/zmx
+                                          cat > $out/bin/zmx << 'MOCK_ZMX'
+                                            #!/bin/sh
+                                            if [ "$1" = "attach" ]; then
+                                              echo "GW_BACKEND_CALL=attach session=$2" >&2
+                                            fi
+                                            exit 0
+                                          MOCK_ZMX
+                                          chmod +x $out/bin/zmx
 
                             cat > $out/bin/zmx-local << 'MOCK_LOCAL'
                               #!/bin/sh
                               case "$1" in
                                 list) cat << 'EOF'
-              prefix-session1
-              prefix-session2
-              other-session
+              session_name=gateway-git pid=1234 clients=1
+              session_name=other-session pid=5678 clients=0
               EOF
                                   ;;
                                 attach)
@@ -459,20 +459,20 @@
                                   ;;
                               esac
                             MOCK_LOCAL
-                            chmod +x $out/bin/zmx-local
+                                          chmod +x $out/bin/zmx-local
 
-                            GATEWAY=${gatewayApp}/bin/gateway
-                            PATH="$out/bin:$PATH" STDERR=$($GATEWAY 2>&1 || true)
+                                          GATEWAY=${gatewayApp}/bin/gateway
+                                          PATH="$out/bin:$PATH" STDERR=$($GATEWAY 2>&1 || true)
 
-                            if echo "$STDERR" | grep -q "FZF_CALLED" && \
-                               echo "$STDERR" | grep -q "GW_BACKEND_CALL=attach session=gateway-git"; then
-                              echo "PASS: uses-fzf - fzf selected session passed to attach"
-                              touch $out/passed
-                            else
-                              echo "FAIL: uses-fzf"
-                              echo "stderr was: $STDERR"
-                              exit 1
-                            fi
+                                          if echo "$STDERR" | grep -q "FZF_CALLED" && \
+                                             echo "$STDERR" | grep -q "GW_BACKEND_CALL=attach session=gateway-git"; then
+                                            echo "PASS: uses-fzf - fzf selected session passed to attach"
+                                            touch $out/passed
+                                          else
+                                            echo "FAIL: uses-fzf"
+                                            echo "stderr was: $STDERR"
+                                            exit 1
+                                          fi
             '';
           };
         }

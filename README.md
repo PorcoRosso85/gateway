@@ -23,7 +23,7 @@ nix run .#gateway -- --list
 nix run .#gateway -- --session <name>
 
 # prefixでフィルタして選択
-nix run .#gateway -- --prefix dev -- --list
+nix run .#gateway -- --list --prefix dev
 
 # GitHubから（push後）
 nix run github:<owner>/<repo>#gateway
